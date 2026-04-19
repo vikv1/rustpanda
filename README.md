@@ -2,7 +2,7 @@
 
 A high-performance, distributed message broker written in Rust, inspired by Redpanda's thread-per-core shared-nothing architecture. Built on [glommio](https://github.com/DataDog/glommio) and `io_uring` for Direct I/O with no kernel page cache overhead.
 
-> ⚠️ **Work in progress.** This is a personal systems project built to learn high-performance distributed systems from first principles. Not production ready.
+> **Work in progress.** This is a personal systems project built to learn high-performance distributed systems from first principles. Not production ready.
 
 ---
 
@@ -10,7 +10,7 @@ A high-performance, distributed message broker written in Rust, inspired by Redp
 
 Rustpanda is designed around three core principles:
 
-**Thread-per-core, shared-nothing.** Each CPU core runs an isolated `glommio` executor. Partitions are pinned to cores — a partition is never accessed by more than one thread. No locks, no cross-thread contention, no `Arc<Mutex<T>>`.
+**Thread-per-core, shared-nothing.** Each CPU core runs an isolated `glommio` executor. Partitions are pinned to cores. A partition is never accessed by more than one thread. No locks, no cross-thread contention, no `Arc<Mutex<T>>`.
 
 **Direct I/O via io_uring.** All disk access bypasses the kernel page cache using `DmaFile`. Writes and reads are block-aligned, giving predictable latency instead of occasional stalls from OS cache flushes.
 
