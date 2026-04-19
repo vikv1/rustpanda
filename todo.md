@@ -1,2 +1,3 @@
 1. todo: assign current offset correctly on restart when reopening the file. currently we just set the offset to the very end but in the event of a partial/corrupted write at the end, we need to roll the offset back to the beginning of that entry and overwrite or delete it. we currently have no way of telling whether a block is a length entry or body entry, so simply calling `align_down` doesnt work. FIX: mark the length entries with CRC32 checksums at the beginning. we can then check these to rollback properly
 2. flushes to disk via fsync or fdatasync are costly IO ops in terms of time. this can be mitigated by batching flushes. 
+3. zero copy transfer from disk to network using `sendfile` in the read path to avoid copying to vector
