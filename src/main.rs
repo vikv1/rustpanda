@@ -1,5 +1,5 @@
-mod wal;
+use rustpanda::wal::Wal;
 
 fn main() {
-    println!("Hello, world!");
+	println!("Hello, world!");
 }
