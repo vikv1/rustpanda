@@ -147,7 +147,7 @@ impl Wal {
 				Err(ReadError::CorruptedData) => {
 					println!("Last block is corrupted");
 					panic!("shutting down");
-               // todo: remove corrupted record
+					// todo: remove corrupted record
 				}
 				_ => unreachable!(),
 			}
