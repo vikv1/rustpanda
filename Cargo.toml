@@ -24,3 +24,7 @@ path = "src/lib.rs"
 [[bin]]
 name = "rustpanda"
 path = "src/main.rs"
+
+[[bin]]
+name = "benchmark"
+path = "src/bin/benchmark.rs"
