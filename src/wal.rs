@@ -145,10 +145,10 @@ impl Wal {
 					active_physical_offset += ONE_MB as u64
 				}
 				Err(ReadError::CorruptedData) => {
-               println!("Last block is corrupted");
-               panic!("shutting down");
-            }
-            _ => unreachable!(),
+					println!("Last block is corrupted");
+					panic!("shutting down");
+				}
+				_ => unreachable!(),
 			}
 		}
 
@@ -693,6 +693,105 @@ mod tests {
 			// 3. Read from Cold Path
 			let read_cold = wal.read(offset).await.unwrap();
 			assert_eq!(read_cold, msg);
+		});
+	}
+	#[test]
+	fn test_crc32_math_verification() {
+		// 1. Create a dummy buffer simulating a 1MB block
+		let mut block = vec![0u8; ONE_MB];
+
+		// 2. Write a fake payload starting after the 20-byte header
+		let payload = b"hyperscale data";
+		let valid_length = 20 + payload.len();
+		block[20..valid_length].copy_from_slice(payload);
+
+		// 3. Calculate the true CRC32
+		let mut hasher = crc32fast::Hasher::new();
+		hasher.update(&block[20..valid_length]);
+		let true_crc = hasher.finalize();
+
+		// 4. Construct a fake BatchHeader
+		let header = BatchHeader {
+			crc32: true_crc,
+			valid_length: valid_length as u32,
+			base_offset: 0,
+			message_count: 1,
+		};
+
+		// 5. Test 1: The untouched block should pass verification
+		let result = BatchHeader::verify_crc(&block, &header);
+		assert_eq!(result, Ok(()), "Valid CRC was incorrectly rejected");
+
+		// 6. Test 2: Simulate Bit Rot (Flip a single byte in the payload)
+		block[25] = 0xFF;
+
+		let corrupted_result = BatchHeader::verify_crc(&block, &header);
+		assert_eq!(
+			corrupted_result,
+			Err(ReadError::CorruptedData),
+			"Failed to detect bit rot in the payload!"
+		);
+	}
+
+	#[test]
+	fn test_cold_path_bit_rot_detection() {
+		run_glommio_test("bit_rot_detection", |path| async move {
+			let mut expected_corrupted_offset;
+
+			// --- PHASE 1: Write Two Blocks ---
+			{
+				let mut wal = Wal::create(&path).await;
+
+				// Block 0: The target for our corruption
+				let msg0 = b"critical financial data";
+				expected_corrupted_offset = wal.append(msg0).unwrap();
+				let huge_msg = vec![0xAA; ONE_MB - 30];
+				wal.append(&huge_msg).unwrap(); // Force Block 0 to disk
+
+				// Block 1: The safe block
+				// We write a second block because `Wal::open` checks the LAST block to boot.
+				// If we corrupt the last block, the engine intentionally panics on boot.
+				// We want it to boot successfully so we can test the `read()` router!
+				wal.append(b"safe boot data").unwrap();
+				wal.append(&huge_msg).unwrap(); // Force Block 1 to disk
+
+				// Wait for DMA flushes to finish
+				glommio::timer::sleep(Duration::from_millis(500)).await;
+
+				// The WAL goes out of scope here. The file is closed.
+			}
+
+			// --- PHASE 2: The Malicious Bit Rot ---
+			{
+				use std::io::{Seek, SeekFrom, Write};
+
+				// Open the physical file using standard synchronous Rust I/O
+				let mut file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+
+				// Seek past the 20-byte header of Block 0, right into the payload
+				file.seek(SeekFrom::Start(25)).unwrap();
+
+				// Overwrite a few bytes to simulate physical disk decay
+				file.write_all(b"HACK").unwrap();
+				file.sync_all().unwrap();
+			}
+
+			// --- PHASE 3: The Cold Read ---
+			{
+				// Boot the engine back up. It will read Block 1, verify its CRC, and boot safely.
+				let wal = Wal::open(&path).await;
+
+				// Now, a consumer asks for the data from Block 0.
+				// The router will hit the Cold Path, read Block 0 from the disk,
+				// run the CRC check, and MUST return an error before parsing the garbage.
+				let read_result = wal.read(expected_corrupted_offset).await;
+
+				assert_eq!(
+					read_result,
+					Err(ReadError::CorruptedData),
+					"Engine blindly served corrupted data from the disk!"
+				);
+			}
 		});
 	}
 }
