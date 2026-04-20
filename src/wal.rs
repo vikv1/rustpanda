@@ -56,6 +56,25 @@ impl BatchHeader {
 			message_count: u32::from_be_bytes(bytes[16..20].try_into().unwrap()),
 		})
 	}
+
+	pub fn verify_crc(block_bytes: &[u8], header: &BatchHeader) -> Result<(), ReadError> {
+		let mut hasher = crc32fast::Hasher::new();
+
+		let valid_len = header.valid_length as usize;
+
+		if valid_len > block_bytes.len() {
+			return Err(ReadError::CorruptedData);
+		}
+
+		hasher.update(&block_bytes[20..valid_len]);
+		let checksum = hasher.finalize();
+
+		if checksum != header.crc32 {
+			Err(ReadError::CorruptedData)
+		} else {
+			Ok(())
+		}
+	}
 }
 
 const ONE_MB: usize = 1 << 20;
@@ -114,13 +133,23 @@ impl Wal {
 		if size > 0 {
 			active_physical_offset = size - (ONE_MB as u64);
 
-			let header_chunk = file
-				.read_at_aligned(active_physical_offset, DISK_BLOCK_SIZE)
+			let last_block = file
+				.read_at_aligned(active_physical_offset, ONE_MB)
 				.await
 				.unwrap();
-			let header = BatchHeader::parse(&header_chunk[0..20]).unwrap();
-			recovered_logical_offset = header.base_offset + (header.message_count as u64);
-			active_physical_offset += ONE_MB as u64
+			let header = BatchHeader::parse(&last_block[0..20]).unwrap();
+
+			match BatchHeader::verify_crc(&last_block, &header) {
+				Ok(_) => {
+					recovered_logical_offset = header.base_offset + (header.message_count as u64);
+					active_physical_offset += ONE_MB as u64
+				}
+				Err(ReadError::CorruptedData) => {
+               println!("Last block is corrupted");
+               panic!("shutting down");
+            }
+            _ => unreachable!(),
+			}
 		}
 
 		Wal {
@@ -291,6 +320,8 @@ impl Wal {
 					.read_at_aligned(physical_disk_offset, ONE_MB)
 					.await
 					.unwrap();
+
+				BatchHeader::verify_crc(&full_block, &header)?;
 
 				return self.scan_memory_block(
 					&full_block,
