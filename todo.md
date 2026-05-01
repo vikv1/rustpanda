@@ -8,6 +8,7 @@
 - [ ] Remove to_vec() in scan_memory_block, return zero-copy slice instead
 - [ ] Log retention: delete old batch files after configurable time or size threshold
 - [ ] Segment-based storage: split WAL into fixed-size segment files instead of one growing file
+- [ ] Tail scanner so `open()` can handle a file that shut down mid-write
 
 ## Partition (`src/partition.rs`)
 - [ ] Basic struct wrapping WAL with partition ID and topic name
