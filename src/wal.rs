@@ -376,6 +376,7 @@ impl Wal {
 			return Err(ReadError::CorruptedData);
 		}
 
+      // TODO: remove the to_vec() call
 		let target_msg = block_bytes[cursor + 8..cursor + 8 + target_len].to_vec();
 		Ok(target_msg)
 	}
