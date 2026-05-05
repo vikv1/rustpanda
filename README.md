@@ -42,7 +42,7 @@ Append-only write-ahead log backed by a `DmaFile`. Core operations:
 - `read(offset)` returns `(message, next_offset)`, the message bytes and the next aligned offset
 
 Planned improvements:
-- [ ] CRC32 checksum in header for corruption detection and crash recovery
+- [x] CRC32 checksum in header for corruption detection and crash recovery
 - [ ] Batch fsync to group multiple appends before syncing for higher throughput
 - [ ] Segment-based storage to support log retention and compaction
 
@@ -131,7 +131,7 @@ kubectl apply -f k8s/
 - [ ] Multi-partition topics
 - [ ] Replication with leader election
 - [ ] Log retention and segment compaction
-- [ ] Checksum-based crash recovery
+- [x] Checksum-based crash recovery
 - [ ] Batch fsync for throughput
 - [ ] Rust client library on crates.io
 - [ ] Benchmarks vs Kafka and Redpanda
